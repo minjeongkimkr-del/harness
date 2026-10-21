@@ -181,8 +181,9 @@ export function prdPlanKeys() {
 export const screensHeadingCount = () => (read("docs/screens.md").match(/^## /gm) ?? []).length;
 
 export function sh(cmd, args, opts = {}) {
-  // Windows에서는 npm이 npm.cmd라서 셸을 거쳐야 실행된다
-  const r = spawnSync(cmd, args, { cwd: ROOT, encoding: "utf8", shell: process.platform === "win32", ...opts });
+  // Windows에서는 npm이 npm.cmd라서 셸을 거쳐야 실행된다 (인자에 공백이 있는 git 등은 셸 없이)
+  const shell = process.platform === "win32" && cmd === "npm";
+  const r = spawnSync(cmd, args, { cwd: ROOT, encoding: "utf8", shell, ...opts });
   return { code: r.status ?? 1, out: (r.stdout ?? "") + (r.stderr ?? "") };
 }
 
