@@ -4,7 +4,8 @@
 // 완료 표시 · 신청 내역 · '요금제 더 보기' 버튼을 그린다.
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { getPlan, formatWon } from "@/lib/plans";
+import { formatWon, type Plan } from "@/lib/plans";
+import { fetchPlan } from "@/lib/plans-db";
 import { getSubscription, maskName, maskPhone, type Subscription } from "@/lib/subscription";
 import Header from "../_components/Header";
 import ListRow from "../_components/ListRow";
@@ -15,9 +16,9 @@ import StateMessage from "../_components/StateMessage";
 import { SkeletonBox } from "../_components/Skeleton";
 import { readPageState, UNKNOWN_MESSAGE } from "../_components/pageState";
 
-// 서버에서 불러온 결과. 어느 신청 번호(id)의 결과인지 함께 기억한다
+// 서버에서 불러온 결과. 어느 신청 번호(id)의 결과인지 함께 기억한다 (찾았으면 신청한 요금제도 함께, 못 불러오면 null)
 type LoadResult =
-  | { id: string; status: "found"; subscription: Subscription }
+  | { id: string; status: "found"; subscription: Subscription; plan: Plan | null }
   | { id: string; status: "missing" }
   | { id: string; status: "failed" };
 
@@ -43,14 +44,19 @@ export default function CompleteView() {
 
   const [result, setResult] = useState<LoadResult | null>(null);
 
-  // 신청 번호로 서버에서 신청 1건만 불러온다. 다른 번호로 바뀌면 지난 결과는 버린다
+  // 신청 번호로 서버에서 신청 1건만 불러오고, 찾으면 그 신청의 요금제(이름 표시용)를 DB에서 불러온다.
+  // 요금제를 못 불러오면 이름 자리에 "확인 필요"를 둔다. 다른 번호로 바뀌면 지난 결과는 버린다
   useEffect(() => {
     if (!shouldLoad) return;
     let active = true;
     getSubscription(id)
-      .then((subscription) => {
-        if (!active) return;
-        setResult(subscription ? { id, status: "found", subscription } : { id, status: "missing" });
+      .then(async (subscription) => {
+        if (!subscription) {
+          if (active) setResult({ id, status: "missing" });
+          return;
+        }
+        const plan = await fetchPlan(subscription.plan_id).catch(() => null);
+        if (active) setResult({ id, status: "found", subscription, plan });
       })
       .catch(() => {
         if (active) setResult({ id, status: "failed" });
@@ -65,7 +71,7 @@ export default function CompleteView() {
   const loading = shouldLoad && !current;
   const subscription = current && current.status === "found" ? current.subscription : null;
   const loadFailed = current?.status === "failed";
-  const plan = subscription ? getPlan(subscription.plan_id) : undefined;
+  const plan = current && current.status === "found" ? current.plan : null;
 
   // 신청 번호가 없거나 그 번호의 신청을 찾지 못하면 요금제 목록으로 바꿔 보낸다(뒤로가기 기록에 남지 않음).
   // 상태 확인용 주소(?state=loading · empty · error)는 보내지 않고 그대로 보여 준다

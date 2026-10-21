@@ -1,8 +1,10 @@
 "use client";
 
 // 요금제 상세 화면 본문: 헤더 · 추천 Tag · 월 요금 상자 · 기본 제공 항목 · 신청 버튼 영역을 그린다.
-import { useParams, useSearchParams } from "next/navigation";
-import { getPlan, formatWon, priceAfterLabel, speedLabel } from "@/lib/plans";
+import { use } from "react";
+import { useSearchParams } from "next/navigation";
+import { formatWon, priceAfterLabel, speedLabel } from "@/lib/plans";
+import type { PlanLoad } from "../../_components/planLoad";
 import Header from "../../_components/Header";
 import RecommendTag from "../../_components/RecommendTag";
 import ListRow from "../../_components/ListRow";
@@ -25,14 +27,16 @@ export function PlanDetailLoading() {
   );
 }
 
-export default function PlanDetailView() {
-  const { id } = useParams<{ id: string }>();
+export default function PlanDetailView({ planLoad }: { planLoad: Promise<PlanLoad> }) {
   const state = readPageState(useSearchParams());
-  // 주소의 id로 요금제를 찾는다. p01~p04가 아니면 없음
-  const plan = getPlan(id);
+  // 서버가 주소의 id로 DB에서 불러온 요금제. 없는 id면 없음, 불러오기가 실패해도 없음
+  const loaded = use(planLoad);
+  const plan = loaded.status === "ok" ? loaded.plan : null;
+  // 기본 화면에서 불러오기가 실패하면 오류 상태와 같은 화면을 보여 준다
+  const loadFailed = state === "default" && loaded.status === "failed";
   const title = plan ? plan.name : UNKNOWN_MESSAGE;
 
-  // 로딩 · 빈 · 오류 상태, 또는 없는 요금제 id일 때: 헤더만 남기고 스켈레톤이나 "확인 필요" 문구를 보여 준다
+  // 로딩 · 빈 · 오류 상태, 불러오기 실패, 또는 없는 요금제 id일 때: 헤더만 남기고 스켈레톤이나 "확인 필요" 문구를 보여 준다
   if (state !== "default" || !plan) {
     return (
       <main className="flex min-h-dvh w-full flex-col bg-bg-surface">
@@ -40,7 +44,7 @@ export default function PlanDetailView() {
         {state === "loading" ? (
           <PlanDetailLoading />
         ) : (
-          <StateMessage message={UNKNOWN_MESSAGE} tone={state === "error" ? "error" : "empty"} />
+          <StateMessage message={UNKNOWN_MESSAGE} tone={state === "error" || loadFailed ? "error" : "empty"} />
         )}
       </main>
     );

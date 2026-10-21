@@ -1,9 +1,9 @@
 "use client";
 
 // 구독 신청 화면 본문: 신청 내용 요약 · 신청자 정보 입력 · 동의 · '신청하기' 버튼을 그린다.
-import { useState } from "react";
+import { use, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { getPlan, formatWon, priceAfterLabel } from "@/lib/plans";
+import { formatWon, priceAfterLabel } from "@/lib/plans";
 import { saveSubscription } from "@/lib/subscription";
 import Header from "../_components/Header";
 import ListRow from "../_components/ListRow";
@@ -14,6 +14,7 @@ import Checkbox from "../_components/Checkbox";
 import StateMessage from "../_components/StateMessage";
 import { SkeletonBox } from "../_components/Skeleton";
 import { readPageState, UNKNOWN_MESSAGE } from "../_components/pageState";
+import type { PlanLoad } from "../_components/planLoad";
 
 // 오류 안내 문구 4개 (PRD 4-3 표 그대로)
 const ERROR_NAME = "이름을 입력해 주세요.";
@@ -43,12 +44,15 @@ export function ApplyLoading() {
   );
 }
 
-export default function ApplyView() {
+export default function ApplyView({ planLoad }: { planLoad: Promise<PlanLoad> }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const state = readPageState(searchParams);
-  // 주소의 ?plan 값으로 고른 요금제를 찾는다
-  const plan = getPlan(searchParams.get("plan") ?? "");
+  // 서버가 주소의 ?plan 값으로 DB에서 불러온 고른 요금제. 없는 요금제거나 불러오기가 실패하면 없음
+  const loaded = use(planLoad);
+  const plan = loaded.status === "ok" ? loaded.plan : null;
+  // 요금제 불러오기 실패: 요금제 요약을 그릴 수 없어 오류 안내 문구만 보여 준다
+  const loadFailed = loaded.status === "failed";
   // 뒤로 · 취소 목적지: 고른 요금제의 상세 화면 (요금제를 못 찾으면 목록). 입력값은 남기지 않는다
   const backHref = plan ? `/plans/${plan.id}` : "/plans";
 
@@ -60,12 +64,16 @@ export default function ApplyView() {
   const [saveFailed, setSaveFailed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  // 로딩 · 빈 상태, 또는 요금제를 못 찾았을 때: 헤더만 남기고 스켈레톤이나 "확인 필요" 문구를 보여 준다
+  // 로딩 · 빈 상태, 또는 요금제를 못 찾았거나 불러오지 못했을 때: 헤더만 남기고 스켈레톤이나 "확인 필요" 문구를 보여 준다
   if (state === "loading" || state === "empty" || !plan) {
     return (
       <main className="flex min-h-dvh w-full flex-col bg-bg-surface">
         <Header type="default" title="구독 신청" backHref={backHref} />
-        {state === "loading" ? <ApplyLoading /> : <StateMessage message={UNKNOWN_MESSAGE} />}
+        {state === "loading" ? (
+          <ApplyLoading />
+        ) : (
+          <StateMessage message={UNKNOWN_MESSAGE} tone={state !== "empty" && loadFailed ? "error" : "empty"} />
+        )}
       </main>
     );
   }
